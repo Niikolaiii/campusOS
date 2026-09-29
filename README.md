@@ -1,20 +1,37 @@
 # CampusOps — Render deployment
 
-CampusOps is a Next.js application served by a Node.js web service. The same Render service serves the frontend and API, and the API stores shared records in Render PostgreSQL. It no longer saves equipment, maintenance requests, user accounts, or authentication state in browser storage. Theme and language preferences remain local to each browser. Environmental readings are simulated for demonstration; they are not sensor hardware data.
+This Render edition uses the final CampusOps interface and stores shared prototype data in Render PostgreSQL. The same Node web service serves the Next.js interface and its API over HTTPS. Equipment, maintenance requests, building-zone controls, alert acknowledgements, and registered staff accounts persist in PostgreSQL. Theme and language preferences remain local to each browser. Sensor readings are simulated for demonstration and are not hardware data.
 
-## Deploy to Render
+## Deploy
 
-1. Put this project in a Git repository and connect that repository to Render.
-2. In Render, choose **New → Blueprint** and select the repository containing `render.yaml`.
-3. Review the Blueprint. It creates one Node web service and one PostgreSQL database in Singapore. On first setup, enter `ADMIN_EMAIL`, a unique `ADMIN_PASSWORD`, and a private `STAFF_INVITE_CODE` when prompted. Render generates `SESSION_SECRET` and connects `DATABASE_URL` internally. Share the invitation code only with intended demo users.
-4. Deploy. The service health check at `/api/health` confirms the database connection. The first API request creates the schema and seeds example equipment and maintenance records.
-5. Open the `onrender.com` HTTPS URL. Register a staff account, then use the configured admin email and password to sign in as administrator.
+1. Upload the contents of this folder (not the ZIP file itself) to the root of a GitHub repository.
+2. In Render, choose **New → Blueprint** and select that repository. Render reads `render.yaml` and creates the web service and PostgreSQL database in Singapore.
+3. Supply `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `STAFF_INVITE_CODE` when prompted. Render generates `SESSION_SECRET` and provides `DATABASE_URL` to the web service.
+4. Deploy and wait for the web service to show **Live**. Open its `onrender.com` URL. The service also uses `/api/health` to check the database connection.
+5. Use the configured admin email and password to enter administration. Staff accounts are registered with the invitation code.
 
-The Render service uses a signed, HTTP-only, Secure (in production), SameSite session cookie. Passwords for registered staff accounts are stored as salted scrypt hashes. API routes enforce sign-in and administrator-only writes on the server. Never add the secret values to source control or browser code.
+Do not commit secrets or share admin credentials or the staff invitation code with unintended viewers.
+
+## Inspect saved data
+
+Open the PostgreSQL database in the Render dashboard, choose **Apps**, and deploy pgAdmin. Connect to the database using the credentials shown by Render. In pgAdmin's Query Tool, run:
+
+```sql
+SELECT updated_at,
+       jsonb_array_length(value->'equipment') AS equipment_count,
+       jsonb_array_length(value->'tickets') AS maintenance_count,
+       value->'equipment' AS equipment,
+       value->'tickets' AS maintenance_requests,
+       value->'zones' AS building_controls
+FROM prototype_state
+WHERE key = 'campusops';
+```
+
+Run the query again after making an app change. Registered staff accounts are stored separately in `app_users`; passwords are stored as salted hashes.
 
 ## Local development
 
-Requirements: Node.js 22.13+ and pnpm. Copy `.env.example` to `.env.local`; use a PostgreSQL connection URL and private values for the listed variables. Then run:
+Requirements: Node.js 22.13+ and pnpm. Copy `.env.example` to `.env.local` and configure `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `STAFF_INVITE_CODE`. Then:
 
 ```sh
 corepack enable
@@ -22,10 +39,8 @@ pnpm install
 pnpm dev
 ```
 
-The tables and seed records are created automatically when the API first connects. Do not point a public deployment at a local SQLite file or a laptop-only database.
+Open `http://localhost:3000`. The database table for the final prototype state is created automatically on the first authenticated save.
 
-## Data lifetime and prototype limits
+## Demo limitations
 
-The included Blueprint selects Render's free web-service and PostgreSQL plans for a low-cost demonstration. Render's current free PostgreSQL databases expire after 30 days, so upgrade the database before that deadline if you need to keep its data. Free web services can spin down while idle and take time to wake. For persistent long-term use, select a paid PostgreSQL plan and an appropriate web-service plan in the Render Dashboard.
-
-Staff signup requires the private invitation code. The administrator account is separately configured by environment variables. Render web services have a public URL, so invite codes and admin credentials should be shared only with intended viewers. Sensor and energy readings are simulated and reset when the page is refreshed.
+The Blueprint uses Render's free web-service and PostgreSQL plans. Render's free PostgreSQL databases expire after 30 days, so upgrade the database before then if you need the saved data to remain available. Free web services may sleep while idle and take time to wake. Sensor and energy readings are simulated and refresh during use.
